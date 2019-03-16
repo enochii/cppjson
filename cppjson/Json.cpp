@@ -1,9 +1,12 @@
 
 #include <cassert>
+#include <cstdlib>
 //#include <string>
 
 #include "Json.h"
-#define TEST
+//#define TEST
+
+Json Json::null;
 
 //base class, generalize the value type
 class Value {
@@ -17,12 +20,16 @@ public:
 	//getter
 	///*
 	virtual bool getBoolUnsafe();
-	virtual double getDouleUnsafe();
-	virtual int getIntUnsafe();
+	virtual double getDoubleUnsafe();
+	virtual int64_t getIntUnsafe();
 	virtual Json::array& getArrayUnsafe();
 	virtual Json::object& getObjectUnsafe();
 	virtual std::string& getStringUnsafe();
 	//*/
+	virtual Json& getArrayItemUnsafe(size_t i);
+	virtual const Json& getArrayItemUnsafe(size_t i)const;
+	virtual Json& getObjectItemUnsafe(const std::string& key);
+	virtual const Json& getObjectItemUnsafe(const std::string& key)const;
 
 
 	Value() {}
@@ -50,47 +57,67 @@ class JsonBool :public JsonValue<bool> {
 public:
 	bool getBoolUnsafe()override
 	{
+		//std::cout << value;
 		return value;
 	}
 	explicit JsonBool(bool b):JsonValue(BOOLEAN, b){}
 };
 
-class JsonInt :public JsonValue<int> {
+class JsonInt :public JsonValue<int64_t> {
 public:
-	int getIntUnsafe()override
+	int64_t getIntUnsafe()override
 	{
 		return value;
 	}
-	explicit JsonInt(int i):JsonValue(INT, i){}
+	explicit JsonInt(int64_t i):JsonValue(NUMBER, i){}
 };
 
 class JsonDouble :public JsonValue<double> {
 public:
-	double getDoubleUnsafe() 
+	double getDoubleUnsafe()override
 	{
 		return value;
 	}
-	explicit JsonDouble(double d):JsonValue(DOUBLE, d){}
+	explicit JsonDouble(double d):JsonValue(NUMBER, d){}
 };
 
 class JsonArray:public JsonValue<Json::array>{
 public:
-	Json::array& getArrayUnsafe()
+	Json::array& getArrayUnsafe()override
 	{
 		return value;
 	}
 	explicit JsonArray(const Json::array& arr):JsonValue(ARRAY,arr){}
 	explicit JsonArray(Json::array&& arr) :JsonValue(ARRAY, arr) {}
+
+	Json& getArrayItemUnsafe(size_t i)override
+	{
+		return const_cast<Json&>((static_cast<const JsonArray&>(*this)).getArrayItemUnsafe(i));
+	}
+	const Json& getArrayItemUnsafe(size_t i)const override
+	{
+		assert(value.size() > i);
+		return value[i];
+	}
 };
 
 class JsonObject :public JsonValue<Json::object> {
 public:
-	Json::object& getObjectUnsafe() 
+	Json::object& getObjectUnsafe() override
 	{
 		return value;
 	}
 	explicit JsonObject(const Json::object& obj):JsonValue(OBJECT, obj){}
 	explicit JsonObject(Json::object&& obj) :JsonValue(OBJECT, obj) {}
+
+	Json& getObjectItemUnsafe(const std::string& key)override
+	{
+		return value[key];
+	}
+	const Json& getObjectItemUnsafe(const std::string& key)const override
+	{
+		return value.at(key);
+	}
 };
 
 class JsonString :public JsonValue<std::string> {
@@ -104,17 +131,35 @@ public:
 };
 
 //
+Json& Value::getArrayItemUnsafe(size_t i)
+{
+	return Json::null;
+}
+const Json& Value::getArrayItemUnsafe(size_t i)const
+{
+	return Json::null;
+
+}
+Json& Value::getObjectItemUnsafe(const std::string& key)
+{
+	return Json::null;
+}
+const Json& Value::getObjectItemUnsafe(const std::string& key)const
+{
+	return Json::null;
+}
+
 bool Value::getBoolUnsafe()
 {
 	return false;
 }
 
-int Value::getIntUnsafe()
+int64_t Value::getIntUnsafe()
 {
 	return 0;
 }
 
-double Value::getDouleUnsafe()
+double Value::getDoubleUnsafe()
 {
 	return 0.0;
 }
@@ -137,14 +182,14 @@ std::string& Value::getStringUnsafe()
 	return s;
 }
 
-///*
+/*
 //模板的非类型参数比如这里的tag推导不出来，总感觉肯定用词不当
 template<typename T>
 JsonValue<T> make_jsonValue(ValueType tag, T&& value)
 {
 	return JsonValue<T>(tag, std::move(value));
 }
-//*/
+*/
 
 inline int Json::getType()const
 {
@@ -161,19 +206,15 @@ bool Json::isBool()const
 	return getType() == BOOLEAN;
 }
 
-bool Json::isDouble()const
+bool Json::isNumber()const
 {
-	return getType() == DOUBLE;
-}
-
-bool Json::isInt()const
-{
-	return getType() == INT;
+	return getType() == NUMBER;
 }
 
 bool Json::isNull()const
 {
-	return getType() == NUL;
+	return mptr == nullptr;//
+		//getType() == NUL;
 }
 
 bool Json::isObject()const
@@ -199,16 +240,16 @@ const Json::object& Json::getObject()const
 	return mptr->getObjectUnsafe();
 }
 
-int Json::getInt()const
+int64_t Json::getInt()const
 {
-	assert(isInt());
+	assert(isNumber());
 	return mptr->getIntUnsafe();
 }
 
 double Json::getDouble()const
 {
-	assert(isDouble());
-	return mptr->getDouleUnsafe();
+	assert(isNumber());
+	return mptr->getDoubleUnsafe();
 }
 
 const std::string& Json::getString()const
@@ -224,12 +265,35 @@ bool Json::getBool()const
 }
 
 //Json ctr
-Json::Json(int i):mptr(std::make_shared<Value>(JsonInt(i))){}
-Json::Json(bool b):mptr(std::make_shared<Value>(JsonBool(b))){}
-Json::Json(double d):mptr(std::make_shared<Value>(JsonDouble(d))){}
-Json::Json(const std::string& s):mptr(std::make_shared<Value>(JsonString(s))) {}
-Json::Json(std::string&& s):mptr(std::make_shared<Value>(JsonString(std::move(s)))){}
-Json::Json(const Json::array& a):mptr(std::make_shared<Value>(JsonArray(a))){}
-Json::Json(Json::array&& a):mptr(std::make_shared<Value>(JsonArray(std::move(a)))){}
-Json::Json(const Json::object& o):mptr(std::make_shared<Value>(JsonObject(o))){}
-Json::Json(Json::object&& o):mptr(std::make_shared<Value>(JsonObject(std::move(o)))){}
+Json::Json(int64_t i):mptr(std::make_shared<JsonInt>(JsonInt(i))){}
+Json::Json(bool b):mptr(std::make_shared<JsonBool>(JsonBool(b))){}
+Json::Json(double d):mptr(std::make_shared<JsonDouble>(d)){
+	//std::cout << "JsonDouble make_shared!\n";
+}
+Json::Json(const std::string& s):mptr(std::make_shared<JsonString>(s)) {}
+Json::Json(std::string&& s):mptr(std::make_shared<JsonString>(std::move(s))){}
+Json::Json(const Json::array& a):mptr(std::make_shared<JsonArray>(a)){}
+Json::Json(Json::array&& a):mptr(std::make_shared<JsonArray>(std::move(a))){}
+Json::Json(const Json::object& o):mptr(std::make_shared<JsonObject>(o)){}
+Json::Json(Json::object&& o):mptr(std::make_shared<JsonObject>(std::move(o))){}
+
+Json& Json::operator[](size_t i)
+{
+	assert(isArray());
+	return mptr->getArrayItemUnsafe(i);
+}
+const Json& Json::operator[](size_t i)const
+{
+	assert(isArray());
+	return mptr->getArrayItemUnsafe(i);
+}
+Json& Json::operator[](const std::string& key)
+{
+	assert(isObject());
+	return mptr->getObjectItemUnsafe(key);
+}
+const Json& Json::operator[](const std::string& key)const
+{
+	assert(isObject());
+	return mptr->getObjectItemUnsafe(key);
+}

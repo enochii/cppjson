@@ -11,12 +11,15 @@
 
 
 enum ValueType {
-	NUL, BOOLEAN, INT, DOUBLE, STRING, ARRAY, OBJECT,
+	NUL, BOOLEAN, NUMBER, STRING, ARRAY, OBJECT,
 };
 
 class Value;
 
 class Json {
+	//friend class JsonParser;
+	friend class Value;
+
 	std::shared_ptr<Value> mptr;
 	static Json null;
 
@@ -27,14 +30,14 @@ public:
 	//ctr
 	Json(Json&&) = default;
 	//先埋一波炸弹
-	Json(const Json&) {
-		std::cout << __LINE__ << '\n';
-	}
+	Json(const Json&) = default;
+	Json& operator=(Json&&) = default;
+	Json& operator=(const Json&) = default;
 	Json() = default;
 	Json(void*) = delete;
 
 	//可以隐式转换一波
-	Json(int i);
+	Json(int64_t i);
 	Json(double d);
 	Json(bool b);
 	Json(std::string&& str);
@@ -45,7 +48,7 @@ public:
 	Json(const object& obj);
 
 	//geter
-	int getInt()const;
+	int64_t getInt()const;
 	double getDouble()const;
 	bool getBool()const;
 	const array& getArray()const;
@@ -61,8 +64,7 @@ public:
 
 	bool isNull()const;
 	bool isBool()const;
-	bool isInt()const;
-	bool isDouble()const;
+	bool isNumber()const;
 	bool isArray()const;
 	bool isObject()const;
 	bool isString()const;
